@@ -4,7 +4,8 @@ Local CLI with a Web UI to fill Word (`.docx`) templates.
 
 อ่านตัวแปรจากเทมเพลต Word แล้วเปิดฟอร์มให้กรอก แทนค่าด้วย [`easy-template-x`](https://www.npmjs.com/package/easy-template-x) — ข้อความ / ติ๊ก / รูป / ตาราง / เลขรันอัตโนมัติ
 
-**npm:** https://www.npmjs.com/package/@peerapat.srs/docx-form
+**npm:** https://www.npmjs.com/package/@peerapat.srs/docx-form  
+**GitHub:** https://github.com/peerapatsrs/docx-form
 
 **Author:** Peerapat Surasing · peerapat.srs@gmail.com
 

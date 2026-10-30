@@ -23,6 +23,14 @@
     "name": "Peerapat Surasing",
     "email": "peerapat.srs@gmail.com"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/peerapatsrs/docx-form.git"
+  },
+  "bugs": {
+    "url": "https://github.com/peerapatsrs/docx-form/issues"
+  },
+  "homepage": "https://github.com/peerapatsrs/docx-form#readme",
   "keywords": [
     "cli",
     "docx",
