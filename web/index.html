@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>docx-form</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/style.css?v=jsonio4" />
+  </head>
+  <body>
+    <div class="ambient" aria-hidden="true">
+      <span class="orb orb-a"></span>
+      <span class="orb orb-b"></span>
+      <span class="orb orb-c"></span>
+      <span class="grain"></span>
+    </div>
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div class="brand-copy">
+          <span class="brand-text">docx-form</span>
+          <span class="brand-ver" id="appVersion">v…</span>
+        </div>
+      </div>
+      <div class="status-pill" id="status">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">กำลังเชื่อมต่อ…</span>
+      </div>
+    </header>
+
+    <div id="banner" class="banner" hidden role="status" aria-live="polite"></div>
+
+    <main class="shell">
+      <div class="sheet" id="app"></div>
+    </main>
+
+    <footer class="credits" id="credits">
+      <p class="credits-name">Peerapat Surasing</p>
+      <a class="credits-email" href="mailto:peerapat.srs@gmail.com">peerapat.srs@gmail.com</a>
+      <span class="credits-ver" id="creditsVersion">v…</span>
+      <span class="credits-license">ฟรี · MIT</span>
+    </footer>
+
+    <script src="/app.js?v=jsonio4" type="module"></script>
+  </body>
+</html>

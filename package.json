@@ -1,0 +1,56 @@
+{
+  "name": "@peerapat.srs/docx-form",
+  "version": "1.0.0",
+  "description": "Local CLI with Web UI to fill Word (.docx) templates — text, image replace, and table/list loops",
+  "type": "module",
+  "bin": {
+    "docx-form": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "web",
+    "examples",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "author": {
+    "name": "Peerapat Surasing",
+    "email": "peerapat.srs@gmail.com"
+  },
+  "keywords": [
+    "cli",
+    "docx",
+    "word",
+    "template",
+    "form",
+    "easy-template-x",
+    "peerapat.srs"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json && node ./scripts/copy-web.mjs",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.1",
+    "commander": "^13.1.0",
+    "easy-template-x": "^8.0.0",
+    "hono": "^4.7.5",
+    "jszip": "^3.10.1",
+    "open": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/jszip": "^3.4.0",
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}
