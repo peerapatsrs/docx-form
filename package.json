@@ -1,7 +1,7 @@
 {
   "name": "@peerapat.srs/docx-form",
-  "version": "1.0.0",
-  "description": "Local CLI with Web UI to fill Word (.docx) templates — text, image replace, and table/list loops",
+  "version": "2.0.0",
+  "description": "Local CLI + Web UI to fill Word (.docx) templates — build tags from a sample doc, Gemini source mapping, text/bool/image/list loops",
   "type": "module",
   "bin": {
     "docx-form": "dist/index.js"
@@ -11,6 +11,7 @@
     "web",
     "examples",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {
@@ -45,6 +46,10 @@
     "dev": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json && node ./scripts/copy-web.mjs",
     "start": "node dist/index.js",
+    "test:tagger:api": "node ./scripts/tagger-list-smoke.mjs",
+    "test:tagger:e2e": "node ./scripts/test-tagger-e2e.mjs",
+    "test:tagger:play": "SLOW_MS=500 node ./scripts/tagger-play-demo.mjs",
+    "test:tagger": "npm run test:tagger:api && npm run test:tagger:e2e",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
@@ -53,7 +58,9 @@
     "easy-template-x": "^8.0.0",
     "hono": "^4.7.5",
     "jszip": "^3.10.1",
-    "open": "^10.1.0"
+    "open": "^10.1.0",
+    "pdfjs-dist": "^5.7.284",
+    "tesseract.js": "^6.0.1"
   },
   "devDependencies": {
     "@types/jszip": "^3.4.0",

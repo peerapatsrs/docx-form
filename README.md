@@ -11,6 +11,42 @@ Local CLI with a Web UI to fill Word (`.docx`) templates.
 
 ---
 
+## มีอะไรใหม่ใน 2.0.0
+
+รายละเอียดเต็มใน [CHANGELOG.md](./CHANGELOG.md)
+
+| หัวข้อ | สรุป |
+|--------|------|
+| **สร้างเทมเพลตจากเอกสาร** | ไฮไลต์ในไฟล์ตัวอย่าง → ใส่ `{{ตัวแปร}}` / ห่อแถวตารางเป็นลิสต์ โดยคงดีไซน์ Word |
+| **แมปด้วย Gemini** | Login Google AI แล้วแนบ PDF / Word / รูป — ดึงข้อความ (+ OCR) แล้วเสนอค่าครบทุกช่อง (รอบสองเติมช่องว่าง) |
+| **ตารางสืบทรัพย์ / คอลัมน์ว่าง** | คงเซลล์ว่างในข้อความที่ส่งให้ AI ไม่ให้ค่า「ปัจจุบัน」เลื่อนไปช่อง「ภูมิลำเนา」 |
+| **ซ่อมลิสต์ไม่มีหัว** | ตารางที่มีแค่ `{{/}}` จะได้ `{{#…}}` บนแถวเทมเพลตตอนดาวน์โหลด |
+| อื่นๆ | แท็บใน Word, ดราฟในเบราว์เซอร์, เลือกเลขยาวข้างข้อความไทย, `--host` |
+
+ติดตั้งเวอร์ชันนี้:
+
+```bash
+npm i -g @peerapat.srs/docx-form@2
+```
+
+---
+
+## What's new in 2.0.0
+
+Full notes: [CHANGELOG.md](./CHANGELOG.md)
+
+- **Template tagger** — build `{{tags}}` / table list wraps from a sample `.docx` without wrecking layout  
+- **Gemini source map** — map PDF / Word / images into every field (gap-fill pass + skip placeholders)  
+- **Sparse table fix** — empty cells kept so column alignment (filing vs current domicile) stays correct  
+- **List open repair** — orphan `{{/}}` tables get `{{#…}}` on download  
+- Drafts, Word tabs, long digit selection, `--host`
+
+```bash
+npm i -g @peerapat.srs/docx-form@2
+```
+
+---
+
 ## เริ่มใช้งาน (ไทย)
 
 ### ติดตั้ง
@@ -87,10 +123,26 @@ docx-form -p 4000
 {{/}}
 ```
 
+### สร้างเทมเพลตจากเอกสารตัวอย่าง
+
+ถ้ายังไม่มี `{{tags}}` ในไฟล์ — ใช้โหมด **สร้างเทมเพลตจากเอกสาร** ที่หน้าอัปโหลด:
+
+1. กด **สร้างเทมเพลตจากเอกสาร** แล้วอัปโหลด `.docx` ตัวอย่าง
+2. ลากเลือกข้อความในพรีวิว → **สร้างตัวแปร**
+   - ข้อความ `{{ชื่อ}}` / ติ๊ก `{{ชื่อ?จริง,เท็จ}}`
+   - เลือกในแถวตาราง → **ตาราง/ลิสต์** ห่อแถวด้วย `{{#items}}…{{/}}` และตั้งชื่อฟิลด์รายเซลล์ได้
+   - เลือกหลายย่อหน้า → **ลิสต์** ห่อบล็อกด้วย `{{#items}}…{{/}}` (แท็กฟิลด์ในลูปทีหลังหรือทีละบรรทัด)
+3. ระบบแก้เฉพาะ OOXML เดิม — **คงดีไซน์/ฟอร์แมตต้นทาง**
+4. **ดาวน์โหลดเทมเพลต** หรือ **ใช้กรอกต่อ** เข้าฟอร์มเดิม
+
+ขอบเขต: เฉพาะ `.docx` body · ยังไม่รองรับแท็กรูป Alt Text / PDF เป็นต้นทาง · ลูปตาราง v1 เหมาะกับแถวข้อมูลธรรมดา (ไม่ rebuild ตาราง)
+
 ### ใน Web UI
 
 - พรีวิวเนื้อหาตามโครง Word (รวมตารางจริง / รวมเซลล์)
 - กรอกในช่องว่างของเอกสาร · เพิ่ม/ลบแถวตาราง
+- **Login Google AI (Gemini)** — ต้องเชื่อมต่อก่อนแนบเอกสาร · สร้าง API key ที่ [Google AI Studio](https://aistudio.google.com/apikey) แล้ววางในแอป (เก็บที่ `~/.docx-form/config.json`)
+- **แนบเอกสารต้นทาง** — แนบ PDF / Word (`.docx`) / รูป (หลายไฟล์ได้) · ดึงข้อความ (รวม OCR ไทย+อังกฤษ) แล้วให้ Gemini แมปเข้าช่อง · ถ้ามีหลายค่าให้เลือกหรือข้ามก่อนใส่ฟอร์ม
 - **Export / Import JSON** — ส่งออกหรือนำเข้าค่าที่กรอก (รวมรูปเป็น base64) เพื่อใช้ซ้ำกับเทมเพลตเดิม
 - ลากปรับความกว้างคอลัมน์ได้เฉพาะหน้าจอ (ไม่บันทึกลงไฟล์)
 - รีเฟรชหน้าแล้วยังกู้ค่าที่กรอกไว้ได้ (เก็บในเบราว์เซอร์)
@@ -110,6 +162,7 @@ examples/sample-quote.docx
 
 - Upload a `.docx` template with `{{tags}}`
 - Fill text, bool chips, images, and repeating list/table rows
+- Connect **Google Gemini** (API key from AI Studio), then attach source documents (PDF / DOCX / images) to map values into fields — multi-candidate fields are reviewed before apply
 - Preview layout close to Word (including real tables)
 - Download a filled `.docx` without modifying the original
 
@@ -201,9 +254,7 @@ npm start
 
 ## License
 
-**ฟรี (Free)** — [MIT](./LICENSE)
-
-ใช้งาน แก้ไข และแจกต่อได้ฟรี ไม่มีค่าลิขสิทธิ์แพ็กเกจนี้
+[MIT](./LICENSE) — use, modify, and redistribute under the MIT terms.
 
 ## Credits
 

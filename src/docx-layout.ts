@@ -21,6 +21,11 @@ export type LayoutTableBlock = {
   listName?: string;
   /** Data-row cells with {{#}} / {{/}} stripped; tags remain for fields. */
   templateCells: LayoutCell[];
+  /**
+   * Sample/body rows that still sit below the loop template in Word.
+   * New wrap-row tagging strips these; kept here so tagger preview can show leftovers.
+   */
+  trailingRows?: LayoutCell[][];
   /** Static table (no loop) — all rows including body. */
   staticRows?: LayoutCell[][];
   /** Column widths from w:tblGrid (dxa). */
@@ -107,12 +112,14 @@ function decodeXmlEntities(s: string): string {
     .replace(/&apos;/g, "'");
 }
 
+/** Cell/paragraph plain: <w:t> text with <w:tab/> as \\t (Word tab spacing). */
 function cellPlainText(tcXml: string): string {
   let out = "";
-  const re = /<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g;
+  const re = /<w:tab\b[^>]*\/>|<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(tcXml))) {
-    out += decodeXmlEntities(m[1]);
+    if (m[0].startsWith("<w:tab")) out += "\t";
+    else out += decodeXmlEntities(m[1] || "");
   }
   return out;
 }
@@ -224,11 +231,13 @@ function tableToBlock(
     const joined = rawRows[i].map((c) => c.text).join("");
     const open = /\{\{#([^}]*)\}\}/.exec(joined);
     if (open) {
+      const trailing = resolved.slice(i + 1);
       return {
         type: "table",
         headerRows: resolved.slice(0, i),
         listName: open[1].trim(),
         templateCells: rawRows[i].map(rawToTemplateCell),
+        ...(trailing.length ? { trailingRows: trailing } : {}),
         floating: floating || undefined,
         ...cols,
       };

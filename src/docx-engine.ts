@@ -106,7 +106,7 @@ export type ParseResult = {
 
 /**
  * skipEmptyTags: false — empty string / empty list removes the tag from output
- * (used when the user marks "ไม่ประสงค์กรอก"). Unfilled-but-required is blocked in the UI.
+ * (used when the user marks "ข้าม"). Unfilled-but-required is blocked in the UI.
  */
 const handler = new TemplateHandler({
   skipEmptyTags: false,

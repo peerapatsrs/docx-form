@@ -7,9 +7,28 @@ import {
   parseTemplate,
   type FormField,
 } from "./docx-engine.js";
+import {
+  clearGeminiKey,
+  geminiStatus,
+  getGeminiApiKey,
+  normalizeGeminiModel,
+  writeAiConfig,
+} from "./ai-config.js";
+import { geminiProposeCandidates } from "./gemini-map.js";
+import { extractMany } from "./source-extract.js";
+import {
+  buildDraftFromProposals,
+  ensureCompleteProposals,
+  extractedMeta,
+  proposalsFromHits,
+} from "./source-map.js";
+import { tagTemplate, type TagReplacement } from "./template-tagger.js";
 
 const MAX_DOCX_BYTES = 25 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_SOURCE_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_SOURCE_TOTAL_BYTES = 40 * 1024 * 1024;
+const MAX_SOURCE_FILES = 12;
 
 function isDocx(file: File): boolean {
   const name = file.name.toLowerCase();
@@ -48,8 +67,49 @@ export function createApi(options: { startedAt: Date; version?: string }) {
       author: "Peerapat Surasing",
       email: "peerapat.srs@gmail.com",
       startedAt: options.startedAt.toISOString(),
+      ai: geminiStatus(),
     }),
   );
+
+  api.get("/ai/status", (c) => c.json(geminiStatus()));
+
+  api.post("/ai/google", async (c) => {
+    try {
+      const body = (await c.req.json().catch(() => ({}))) as {
+        apiKey?: string;
+        model?: string;
+      };
+      const key = String(body.apiKey || "").trim();
+      const model = normalizeGeminiModel(body.model);
+      const patch: { geminiApiKey?: string; geminiModel?: string } = {};
+
+      if (key) {
+        if (key.length < 20) {
+          return c.json({ error: "กรุณาใส่ Gemini API key จาก Google AI Studio" }, 400);
+        }
+        patch.geminiApiKey = key;
+      }
+      if (model) patch.geminiModel = model;
+
+      if (!patch.geminiApiKey && !patch.geminiModel) {
+        return c.json({ error: "ส่ง apiKey และ/หรือ model" }, 400);
+      }
+      if (patch.geminiModel && !patch.geminiApiKey && !getGeminiApiKey()) {
+        return c.json({ error: "ต้องเชื่อมต่อ API key ก่อนเปลี่ยนโมเดล" }, 401);
+      }
+
+      writeAiConfig(patch);
+      return c.json({ ok: true, ...geminiStatus() });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: message }, 400);
+    }
+  });
+
+  api.delete("/ai/google", (c) => {
+    clearGeminiKey();
+    return c.json({ ok: true, ...geminiStatus() });
+  });
 
   api.post("/parse", async (c) => {
     try {
@@ -111,6 +171,312 @@ export function createApi(options: { startedAt: Date; version?: string }) {
     } catch (err) {
       const message = formatTemplateError(err);
       return c.json({ error: `อ่านเทมเพลตไม่สำเร็จ: ${message}` }, 400);
+    }
+  });
+
+  api.post("/source-map", async (c) => {
+    const wantStream =
+      c.req.query("stream") === "1" ||
+      (c.req.header("accept") || "").includes("application/x-ndjson");
+
+    try {
+      const form = await c.req.formData();
+      const fieldsRaw = form.get("fields");
+      if (typeof fieldsRaw !== "string") {
+        return c.json({ error: "ต้องส่ง fields เป็น JSON ของฟิลด์เทมเพลต" }, 400);
+      }
+
+      let fields: FormField[];
+      try {
+        const parsed = JSON.parse(fieldsRaw) as unknown;
+        if (!Array.isArray(parsed) || parsed.length === 0) {
+          return c.json({ error: "fields ต้องเป็นอาร์เรย์ของฟิลด์ที่ไม่ว่าง" }, 400);
+        }
+        fields = parsed as FormField[];
+      } catch {
+        return c.json({ error: "fields ต้องเป็น JSON ที่ถูกต้อง" }, 400);
+      }
+
+      const seen = new Set<File>();
+      const files: File[] = [];
+      const pushFile = (val: FormDataEntryValue | null) => {
+        if (!(val instanceof File) || seen.has(val)) return;
+        seen.add(val);
+        files.push(val);
+      };
+      for (const val of form.getAll("files")) pushFile(val);
+      for (const [key, val] of form.entries()) {
+        if (key === "files") continue;
+        if (key === "file" || key.startsWith("file")) pushFile(val);
+      }
+
+      if (files.length === 0) {
+        return c.json({ error: "กรุณาแนบไฟล์ต้นทางอย่างน้อย 1 ไฟล์ (.pdf / .docx / รูป)" }, 400);
+      }
+      if (files.length > MAX_SOURCE_FILES) {
+        return c.json({ error: `แนบได้สูงสุด ${MAX_SOURCE_FILES} ไฟล์ต่อครั้ง` }, 400);
+      }
+
+      let total = 0;
+      for (const f of files) {
+        if (f.size <= 0) {
+          return c.json({ error: `ไฟล์ ${f.name} ว่างเปล่า` }, 400);
+        }
+        if (f.size > MAX_SOURCE_FILE_BYTES) {
+          return c.json({ error: `ไฟล์ ${f.name} ใหญ่เกิน 25 MB` }, 400);
+        }
+        total += f.size;
+      }
+      if (total > MAX_SOURCE_TOTAL_BYTES) {
+        return c.json({ error: "ขนาดไฟล์รวมเกิน 40 MB" }, 400);
+      }
+
+      if (!getGeminiApiKey()) {
+        return c.json(
+          {
+            error:
+              "ต้องเชื่อมต่อ Google AI ก่อน — กด Google AI แล้ววาง Gemini API key จาก AI Studio",
+          },
+          401,
+        );
+      }
+
+      const payloads = await Promise.all(
+        files.map(async (f) => ({
+          buffer: Buffer.from(await f.arrayBuffer()),
+          filename: f.name || "source",
+          mimeType: f.type,
+        })),
+      );
+
+      type ProgressEvt = {
+        type: "log" | "progress" | "result" | "error";
+        message?: string;
+        step?: number;
+        total?: number;
+        label?: string;
+        error?: string;
+        proposals?: unknown;
+        values?: unknown;
+        skip?: unknown;
+        rowSkip?: unknown;
+        extracted?: unknown;
+        ai?: unknown;
+      };
+
+      const runMap = async (emit: (evt: ProgressEvt) => void | Promise<void>) => {
+        const extractSteps = payloads.length;
+        const totalSteps = extractSteps + 2; // extract*N + gemini + build
+        emit({
+          type: "log",
+          message: `เริ่มแมป ${payloads.length} ไฟล์ · โมเดล ${geminiStatus().model}`,
+        });
+        emit({
+          type: "progress",
+          step: 0,
+          total: totalSteps,
+          label: "เตรียมดึงข้อความจากเอกสาร",
+        });
+
+        const extracted = await extractMany(payloads, async (info) => {
+          const step = info.index + (info.phase === "done" ? 1 : 0);
+          const kindLabel =
+            info.kind === "image"
+              ? "OCR รูป"
+              : info.kind === "pdf"
+                ? "อ่าน PDF"
+                : info.kind === "docx"
+                  ? "อ่าน Word"
+                  : "อ่านไฟล์";
+          if (info.phase === "start") {
+            await emit({
+              type: "log",
+              message: `[${info.index + 1}/${info.total}] ${kindLabel}: ${info.filename}`,
+            });
+            await emit({
+              type: "progress",
+              step: info.index,
+              total: totalSteps,
+              label: `${kindLabel} — ${info.filename}`,
+            });
+          } else {
+            const chars = info.result?.charCount ?? 0;
+            const warn = info.result?.warning ? ` · ${info.result.warning}` : "";
+            await emit({
+              type: "log",
+              message: `  ✓ ${info.filename}: ${chars} ตัวอักษร${warn}`,
+            });
+            await emit({
+              type: "progress",
+              step: info.index + 1,
+              total: totalSteps,
+              label: `ดึงข้อความแล้ว ${info.index + 1}/${info.total}`,
+            });
+          }
+        });
+
+        await emit({
+          type: "log",
+          message: `เรียก Google Gemini (${geminiStatus().model})…`,
+        });
+        await emit({
+          type: "progress",
+          step: extractSteps + 1,
+          total: totalSteps,
+          label: "รอคำตอบจาก Gemini",
+        });
+
+        const hits = await geminiProposeCandidates(fields, extracted);
+        await emit({
+          type: "log",
+          message: `Gemini ตอบแล้ว · ${hits.length} ค่า (รวมรอบเติมช่องว่าง)`,
+        });
+        await emit({
+          type: "progress",
+          step: extractSteps + 2,
+          total: totalSteps,
+          label: "จัดข้อเสนอเข้าช่องฟอร์ม",
+        });
+
+        const proposals = ensureCompleteProposals(
+          fields,
+          proposalsFromHits(hits),
+        );
+        const draft = buildDraftFromProposals(fields, proposals);
+        await emit({
+          type: "result",
+          proposals,
+          values: draft.values,
+          skip: draft.skip,
+          rowSkip: draft.rowSkip,
+          extracted: extractedMeta(extracted),
+          ai: { used: true, suggestions: hits.length },
+          message: "แมปเสร็จ",
+        });
+      };
+
+      if (!wantStream) {
+        let payload: {
+          proposals: unknown;
+          values: unknown;
+          skip: unknown;
+          rowSkip: unknown;
+          extracted: unknown;
+          ai: unknown;
+        } | null = null;
+        await runMap((evt) => {
+          if (evt.type === "result") {
+            payload = {
+              proposals: evt.proposals,
+              values: evt.values,
+              skip: evt.skip,
+              rowSkip: evt.rowSkip,
+              extracted: evt.extracted,
+              ai: evt.ai,
+            };
+          }
+          if (evt.type === "error") throw new Error(evt.error || "แมปไม่สำเร็จ");
+        });
+        if (!payload) {
+          return c.json({ error: "แมปเอกสารต้นทางไม่สำเร็จ" }, 400);
+        }
+        return c.json(payload);
+      }
+
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const emit = async (evt: ProgressEvt) => {
+            controller.enqueue(encoder.encode(`${JSON.stringify(evt)}\n`));
+          };
+          try {
+            await runMap(emit);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            const banner = message.startsWith("แมปเอกสารต้นทางไม่สำเร็จ")
+              ? message
+              : `แมปเอกสารต้นทางไม่สำเร็จ — ${message}`;
+            await emit({
+              type: "error",
+              error: banner,
+              message,
+            });
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "application/x-ndjson; charset=utf-8",
+          "Cache-Control": "no-cache",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const banner = message.startsWith("แมปเอกสารต้นทางไม่สำเร็จ")
+        ? message
+        : `แมปเอกสารต้นทางไม่สำเร็จ — ${message}`;
+      return c.json({ error: banner }, 400);
+    }
+  });
+
+  api.post("/template/tag", async (c) => {
+    try {
+      const form = await c.req.formData();
+      const file = form.get("file");
+      if (!(file instanceof File)) {
+        return c.json({ error: "กรุณาอัปโหลดไฟล์ .docx" }, 400);
+      }
+      if (!isDocx(file)) {
+        return c.json(
+          {
+            error:
+              file.name.toLowerCase().endsWith(".doc")
+                ? "รองรับเฉพาะ .docx — ให้ Save As เป็น .docx ใน Word ก่อน"
+                : "ไฟล์ต้องเป็น .docx เท่านั้น",
+          },
+          400,
+        );
+      }
+      if (file.size > MAX_DOCX_BYTES) {
+        return c.json({ error: "ไฟล์ใหญ่เกินไป (สูงสุด 25 MB)" }, 400);
+      }
+
+      const replacementsRaw = form.get("replacements");
+      let replacements: TagReplacement[] = [];
+      if (typeof replacementsRaw === "string" && replacementsRaw.trim()) {
+        try {
+          const parsed = JSON.parse(replacementsRaw) as unknown;
+          if (!Array.isArray(parsed)) {
+            return c.json({ error: "replacements ต้องเป็นอาร์เรย์" }, 400);
+          }
+          replacements = parsed as TagReplacement[];
+        } catch {
+          return c.json({ error: "replacements ต้องเป็น JSON ที่ถูกต้อง" }, 400);
+        }
+      }
+
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const result = await tagTemplate(buffer, replacements);
+      const base = file.name.replace(/\.docx$/i, "") || "template";
+      const outName = `${base}-tagged.docx`;
+
+      return c.json({
+        filename: outName,
+        sourceFilename: file.name,
+        plainText: result.plainText,
+        content: result.content,
+        layout: result.layout,
+        replacementCount: replacements.length,
+        docxBase64: result.buffer.toString("base64"),
+        ...(result.warnings?.length ? { warnings: result.warnings } : {}),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: `แท็กเทมเพลตไม่สำเร็จ: ${message}` }, 400);
     }
   });
 
