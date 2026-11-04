@@ -45,11 +45,12 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json && node ./scripts/copy-web.mjs",
-    "start": "node dist/index.js",
+    "start": "node dist/index.js --no-open",
     "test:tagger:api": "node ./scripts/tagger-list-smoke.mjs",
     "test:tagger:e2e": "node ./scripts/test-tagger-e2e.mjs",
     "test:tagger:play": "SLOW_MS=500 node ./scripts/tagger-play-demo.mjs",
     "test:tagger": "npm run test:tagger:api && npm run test:tagger:e2e",
+    "test:render:smoke": "node ./scripts/render-hosting-smoke.mjs",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
