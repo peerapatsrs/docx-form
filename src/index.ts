@@ -29,15 +29,28 @@ program
   .option("--host <host>", "Host to bind", "127.0.0.1")
   .option("--no-open", "Do not open the browser")
   .action(async (opts: { port: string; host: string; open: boolean }) => {
-    const port = Number(opts.port);
+    const isProduction =
+      process.env.NODE_ENV === "production" || process.env.RENDER === "true";
+
+    // Prefer env (e.g. Render PORT) over CLI defaults; keep 3850 locally.
+    const portRaw = process.env.PORT?.trim() || opts.port;
+    const port = Number(portRaw);
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      console.error(`Invalid port: ${opts.port}`);
+      console.error(`Invalid port: ${portRaw}`);
       process.exit(1);
     }
+
+    // HOST when set; otherwise 0.0.0.0 in production; else CLI default (127.0.0.1).
+    const host =
+      process.env.HOST?.trim() || (isProduction ? "0.0.0.0" : opts.host);
+
+    // Never auto-open a browser on hosted / production deploys.
+    const openBrowser = isProduction ? false : opts.open;
+
     await startServer({
-      host: opts.host,
+      host,
       port,
-      openBrowser: opts.open,
+      openBrowser,
     });
   });
 

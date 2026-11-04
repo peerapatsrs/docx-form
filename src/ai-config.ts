@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 export type AiConfig = {
@@ -9,8 +9,34 @@ export type AiConfig = {
   geminiModel?: string;
 };
 
-const CONFIG_DIR = join(homedir(), ".docx-form");
-const CONFIG_PATH = join(CONFIG_DIR, "config.json");
+/**
+ * Writable directory for uploads, outputs, or other server-side files.
+ * Override with DOCX_FORM_DATA_DIR; defaults to OS temp (`<tmpdir>/docx-form`).
+ */
+export function getDataDir(): string {
+  const fromEnv = process.env.DOCX_FORM_DATA_DIR?.trim();
+  if (fromEnv) return fromEnv;
+  return join(tmpdir(), "docx-form");
+}
+
+/**
+ * AI config directory. Respects DOCX_FORM_DATA_DIR; on hosted/production uses
+ * getDataDir() (temp); locally keeps ~/.docx-form so CLI behaviour is unchanged.
+ */
+function getConfigDir(): string {
+  if (process.env.DOCX_FORM_DATA_DIR?.trim()) {
+    return process.env.DOCX_FORM_DATA_DIR.trim();
+  }
+  const isHosted =
+    process.env.NODE_ENV === "production" || process.env.RENDER === "true";
+  if (isHosted) return getDataDir();
+  return join(homedir(), ".docx-form");
+}
+
+function getConfigPath(): string {
+  return join(getConfigDir(), "config.json");
+}
+
 export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 
 /** Curated text models suitable for source→field mapping. */
@@ -24,14 +50,13 @@ export const GEMINI_MODEL_OPTIONS: { id: string; label: string }[] = [
   { id: "gemini-flash-latest", label: "gemini-flash-latest" },
 ];
 
-export function getConfigPath(): string {
-  return CONFIG_PATH;
-}
+export { getConfigPath };
 
 export function readAiConfig(): AiConfig {
   try {
-    if (!existsSync(CONFIG_PATH)) return {};
-    const raw = JSON.parse(readFileSync(CONFIG_PATH, "utf-8")) as AiConfig;
+    const configPath = getConfigPath();
+    if (!existsSync(configPath)) return {};
+    const raw = JSON.parse(readFileSync(configPath, "utf-8")) as AiConfig;
     return raw && typeof raw === "object" ? raw : {};
   } catch {
     return {};
@@ -40,16 +65,20 @@ export function readAiConfig(): AiConfig {
 
 export function writeAiConfig(patch: Partial<AiConfig>): AiConfig {
   const next: AiConfig = { ...readAiConfig(), ...patch };
-  if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(CONFIG_PATH, JSON.stringify(next, null, 2), "utf-8");
+  const configDir = getConfigDir();
+  const configPath = getConfigPath();
+  if (!existsSync(configDir)) mkdirSync(configDir, { recursive: true });
+  writeFileSync(configPath, JSON.stringify(next, null, 2), "utf-8");
   return next;
 }
 
 export function clearGeminiKey(): AiConfig {
   const cur = readAiConfig();
   delete cur.geminiApiKey;
-  if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(CONFIG_PATH, JSON.stringify(cur, null, 2), "utf-8");
+  const configDir = getConfigDir();
+  const configPath = getConfigPath();
+  if (!existsSync(configDir)) mkdirSync(configDir, { recursive: true });
+  writeFileSync(configPath, JSON.stringify(cur, null, 2), "utf-8");
   return cur;
 }
 
@@ -88,7 +117,8 @@ export function geminiStatus() {
     models: GEMINI_MODEL_OPTIONS,
     defaultModel: DEFAULT_GEMINI_MODEL,
     maskedKey: masked,
-    configPath: CONFIG_PATH,
+    configPath: getConfigPath(),
+    dataDir: getDataDir(),
     studioUrl: "https://aistudio.google.com/apikey",
   };
 }
